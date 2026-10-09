@@ -243,3 +243,7 @@ npm run dev
 - `GET /api/files/{id}/`: Polls the processing status (`PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`).
 - `GET /api/files/{id}/measurements/`: Retrieves the extracted geometries, spatial telemetry, and measurements upon successful processing.
 - `GET /health`: Validates the health of the API, Database, and Broker.
+
+
+## 5. Testing
+For testing, use the files provided in the sample data.
