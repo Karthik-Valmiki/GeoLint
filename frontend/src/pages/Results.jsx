@@ -325,7 +325,7 @@ export default function Results() {
                   <tbody className="divide-y divide-slate-100 text-sm font-medium">
                     {paginatedFeatures.map((f, i) => (
                       <tr key={i} className="hover:bg-blue-50/40 transition-colors">
-                        <td className="py-3.5 px-6 text-slate-400 font-semibold text-xs">{f.feature_index || (i + 1 + (currentPage - 1) * itemsPerPage)}</td>
+                        <td className="py-3.5 px-6 text-slate-400 font-semibold text-xs">{i + 1 + (currentPage - 1) * itemsPerPage}</td>
                         <td className="py-3.5 px-6 text-on-surface font-semibold text-sm">
                           {f.properties?.name || f.properties?.NAME || f.properties?.id || `Feature_${f.feature_index}`}
                         </td>
