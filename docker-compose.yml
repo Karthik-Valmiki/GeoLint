@@ -1,0 +1,98 @@
+services:
+  # ── PostgreSQL + PostGIS ─────────────────────────────────────────────────
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: geolint_postgres
+    environment:
+      POSTGRES_USER: geolint
+      POSTGRES_PASSWORD: geolint
+      POSTGRES_DB: geolint
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U geolint -d geolint"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: geolint_redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI (API server) ──────────────────────────────────────────────────
+  api:
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    container_name: geolint_api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://geolint:geolint@postgres:5432/geolint
+      DATABASE_URL_SYNC: postgresql+psycopg2://geolint:geolint@postgres:5432/geolint
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /app/storage
+      APP_ENV: development
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    volumes:
+      - file_storage:/app/storage
+      - ./frontend:/frontend:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Celery worker ─────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: backend
+      dockerfile: Dockerfile
+    container_name: geolint_worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://geolint:geolint@postgres:5432/geolint
+      DATABASE_URL_SYNC: postgresql+psycopg2://geolint:geolint@postgres:5432/geolint
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /app/storage
+      APP_ENV: development
+      LOG_LEVEL: INFO
+    volumes:
+      - file_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      celery -A app.workers.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=2
+      -Q celery
+
+  # ── Frontend (React/Vite) ────────────────────────────────────────────────
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    container_name: geolint_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  file_storage:
