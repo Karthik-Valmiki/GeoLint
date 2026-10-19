@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+import time
 from typing import Any, Optional
 
 from pyproj import CRS
@@ -144,16 +145,27 @@ def process_file(file_id: int) -> None:
 
         # Stage 2: Parse features
         try:
+            t_parse_start = time.perf_counter()
             if file_type == "KML":
                 raw_features = parse_kml(data)
                 dataset_name = Path(filename).stem
                 source_crs_str = "EPSG:4326"
                 crs_wkt = None
+                parse_ms = (time.perf_counter() - t_parse_start) * 1000
+                logger.info(
+                    "[Preprocessing Metric] file_id=%d (%s) parsed %d features in %.2f ms using C-backed lxml",
+                    file_id, filename, len(raw_features), parse_ms
+                )
             elif file_type == "ZIP":
                 raw_features = parse_shapefile_from_zip(data)
                 dataset_name = Path(filename).stem
                 source_crs_str = raw_features[0]["crs_code"] if raw_features else "EPSG:4326"
                 crs_wkt = raw_features[0].get("crs_wkt") if raw_features else None
+                parse_ms = (time.perf_counter() - t_parse_start) * 1000
+                logger.info(
+                    "[Preprocessing Metric] file_id=%d (%s) parsed %d features in %.2f ms",
+                    file_id, filename, len(raw_features), parse_ms
+                )
             else:
                 raise PermanentProcessingError(f"Unknown file_type: {file_type}")
         except PERMANENT_ERRORS as exc:

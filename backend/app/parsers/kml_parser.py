@@ -198,3 +198,145 @@ def parse_kml(data: bytes) -> list[dict[str, Any]]:
             logger.exception("Failed to parse KML Placemark at index %d; skipping.", idx)
 
     return features
+
+
+# ---------------------------------------------------------------------------
+# Python stdlib ElementTree parser (baseline for quantifying C-backed speedup)
+# ---------------------------------------------------------------------------
+
+def _parse_coords_stdlib(coord_text: str) -> list[tuple]:
+    coords = []
+    for token in coord_text.strip().split():
+        parts = token.split(",")
+        if len(parts) < 2:
+            continue
+        try:
+            coords.append((float(parts[0]), float(parts[1])))
+        except ValueError:
+            continue
+    return coords
+
+
+def _parse_geometry_stdlib(placemark: Any, ns: str) -> BaseGeometry | None:
+    point_el = placemark.find(f"{ns}Point/{ns}coordinates")
+    if point_el is not None and point_el.text:
+        coords = _parse_coords_stdlib(point_el.text)
+        if coords:
+            return Point(coords[0])
+
+    ls_el = placemark.find(f"{ns}LineString/{ns}coordinates")
+    if ls_el is not None and ls_el.text:
+        coords = _parse_coords_stdlib(ls_el.text)
+        if len(coords) >= 2:
+            return LineString(coords)
+
+    poly_el = placemark.find(f"{ns}Polygon")
+    if poly_el is not None:
+        outer = poly_el.find(f"{ns}outerBoundaryIs/{ns}LinearRing/{ns}coordinates")
+        if outer is not None and outer.text:
+            outer_coords = _parse_coords_stdlib(outer.text)
+            inner_coords_list = []
+            for inner in poly_el.findall(f"{ns}innerBoundaryIs/{ns}LinearRing/{ns}coordinates"):
+                if inner.text:
+                    inner_coords_list.append(_parse_coords_stdlib(inner.text))
+            if len(outer_coords) >= 3:
+                return Polygon(outer_coords, inner_coords_list)
+
+    return None
+
+
+def parse_kml_stdlib(data: bytes) -> list[dict[str, Any]]:
+    """Parse KML bytes using Python's standard library xml.etree.ElementTree."""
+    import xml.etree.ElementTree as std_etree
+    try:
+        root = std_etree.fromstring(data)
+    except std_etree.ParseError as exc:
+        raise KMLParseError(f"Malformed KML XML (stdlib): {exc}") from exc
+
+    tag = root.tag
+    ns = ("{" + tag.split("}")[0].lstrip("{") + "}") if "}" in tag else ""
+    placemarks = root.findall(f".//{ns}Placemark")
+
+    features = []
+    for pm in placemarks:
+        geom = _parse_geometry_stdlib(pm, ns)
+        if geom is None:
+            continue
+        geom_type = type(geom).__name__
+        if geom_type not in SUPPORTED_TYPES:
+            continue
+        name_el = pm.find(f"{ns}name")
+        name = name_el.text.strip() if name_el is not None and name_el.text else ""
+        props = {"name": name} if name else {}
+        features.append({
+            "feature_index": len(features),
+            "geometry": geom,
+            "geometry_type": geom_type,
+            "properties": props,
+            "crs_code": KML_CRS,
+        })
+    return features
+
+
+def benchmark_kml_parsing(data: bytes, runs: int = 5) -> dict[str, Any]:
+    """Benchmark C-backed lxml vs stdlib ElementTree on identical KML bytes."""
+    import statistics
+    import time
+
+    # Warmup
+    parse_kml(data)
+    parse_kml_stdlib(data)
+
+    lxml_times = []
+    for _ in range(runs):
+        t0 = time.perf_counter()
+        f_lxml = parse_kml(data)
+        lxml_times.append((time.perf_counter() - t0) * 1000)
+
+    stdlib_times = []
+    for _ in range(runs):
+        t0 = time.perf_counter()
+        f_stdlib = parse_kml_stdlib(data)
+        stdlib_times.append((time.perf_counter() - t0) * 1000)
+
+    lxml_mean = statistics.mean(lxml_times)
+    stdlib_mean = statistics.mean(stdlib_times)
+    speedup = (stdlib_mean / lxml_mean) if lxml_mean > 0 else 1.0
+    reduction_pct = ((stdlib_mean - lxml_mean) / stdlib_mean * 100) if stdlib_mean > 0 else 0.0
+
+    return {
+        "file_size_kb": len(data) / 1024,
+        "features_lxml": len(f_lxml),
+        "features_stdlib": len(f_stdlib),
+        "lxml_mean_ms": round(lxml_mean, 2),
+        "lxml_p95_ms": round(statistics.quantiles(lxml_times, n=20)[-1] if len(lxml_times) >= 20 else max(lxml_times), 2),
+        "stdlib_mean_ms": round(stdlib_mean, 2),
+        "stdlib_p95_ms": round(statistics.quantiles(stdlib_times, n=20)[-1] if len(stdlib_times) >= 20 else max(stdlib_times), 2),
+        "speedup_ratio": round(speedup, 2),
+        "reduction_percent": round(reduction_pct, 1),
+    }
+
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+
+    file_path = sys.argv[1] if len(sys.argv) > 1 else "sample_data/test_features.kml"
+    p = Path(file_path)
+    if not p.exists():
+        print(f"File not found: {file_path}")
+        sys.exit(1)
+
+    print(f"\n=======================================================")
+    print(f"  GeoLint KML Preprocessing Benchmark (C-Backed vs Stdlib)")
+    print(f"  Target File: {p.name} ({p.stat().st_size / 1024:.2f} KB)")
+    print(f"=======================================================")
+
+    results = benchmark_kml_parsing(p.read_bytes(), runs=10)
+    print(f"  Features Parsed:      lxml={results['features_lxml']} | stdlib={results['features_stdlib']}")
+    print(f"  Python stdlib time:   {results['stdlib_mean_ms']} ms (P95: {results['stdlib_p95_ms']} ms)")
+    print(f"  C-backed lxml time:   {results['lxml_mean_ms']} ms (P95: {results['lxml_p95_ms']} ms)")
+    print(f"  Speedup:              {results['speedup_ratio']}x faster")
+    print(f"  Preprocessing Reduced:{results['reduction_percent']}%")
+    print(f"=======================================================\n")
+

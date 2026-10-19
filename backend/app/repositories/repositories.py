@@ -6,7 +6,7 @@ from typing import Optional, Sequence
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.models import Dataset, Feature, File
 
@@ -39,10 +39,10 @@ class FileRepository:
     async def get_by_id(self, file_id: int) -> Optional[File]:
         result = await self._session.execute(
             select(File)
-            .options(selectinload(File.datasets))
+            .options(joinedload(File.datasets))
             .where(File.id == file_id)
         )
-        return result.scalar_one_or_none()
+        return result.unique().scalar_one_or_none()
 
     async def set_status(
         self,

@@ -14,11 +14,14 @@ def _make_engine():
     settings = get_settings()
     return create_async_engine(
         settings.database_url,
-        pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20,
-        echo=settings.app_env == "development",
+        pool_pre_ping=False,
+        pool_size=15,
+        max_overflow=5,
+        pool_timeout=10,
+        echo=False,
     )
+
+
 
 
 _engine = None
