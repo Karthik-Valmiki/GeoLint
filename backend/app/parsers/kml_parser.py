@@ -172,8 +172,14 @@ def parse_kml(data: bytes) -> list[dict[str, Any]]:
     """
     try:
         root = etree.fromstring(data)
-    except etree.XMLSyntaxError as exc:
-        raise KMLParseError(f"Malformed KML XML: {exc}") from exc
+    except etree.XMLSyntaxError:
+        try:
+            recovery_parser = etree.XMLParser(recover=True, huge_tree=True)
+            root = etree.fromstring(data, parser=recovery_parser)
+            if root is None:
+                raise KMLParseError("Malformed KML XML: empty or unrecoverable XML root.")
+        except Exception as exc:
+            raise KMLParseError(f"Malformed KML XML: {exc}") from exc
 
     # Determine namespace
     tag = root.tag
