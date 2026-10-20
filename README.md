@@ -2,8 +2,6 @@
 
 GeoLint is a full-stack, distributed platform designed for asynchronous validation, processing, and measurement of geospatial vector files (KML and Shapefile). 
 
-This project implements a decoupled architecture to reliably manage highly CPU-intensive geoprocessing tasks, ensuring the API layer remains highly available and responsive under heavy workload conditions.
-![alt text](image.png)
 ---
 
 ## 1. Architectural Decisions and Domain Specifications
