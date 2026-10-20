@@ -44,6 +44,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./backend:/app
       - file_storage:/app/storage
       - ./frontend:/frontend:ro
     depends_on:
@@ -51,7 +52,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 
   # ── Celery worker ─────────────────────────────────────────────────────────
   worker:
@@ -67,6 +68,7 @@ services:
       APP_ENV: development
       LOG_LEVEL: INFO
     volumes:
+      - ./backend:/app
       - file_storage:/app/storage
     depends_on:
       postgres:

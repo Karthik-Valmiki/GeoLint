@@ -3,7 +3,7 @@
 GeoLint is a full-stack, distributed platform designed for asynchronous validation, processing, and measurement of geospatial vector files (KML and Shapefile). 
 
 This project implements a decoupled architecture to reliably manage highly CPU-intensive geoprocessing tasks, ensuring the API layer remains highly available and responsive under heavy workload conditions.
-
+![alt text](image.png)
 ---
 
 ## 1. Architectural Decisions and Domain Specifications
@@ -245,5 +245,21 @@ npm run dev
 - `GET /health`: Validates the health of the API, Database, and Broker.
 
 
-## 5. Testing
-For testing, use the files provided in the sample data.
+## 5. Test Datasets & Verification
+
+Sample test files (including standard datasets and 4MB+ benchmark/fault-tolerance test files) can be downloaded from the Google Drive link below:
+
+🔗 **[Download Test Datasets (Google Drive)](https://drive.google.com/drive/folders/1HleOtpjzcBYA6UAMV1knWPwXKzU_xx8s?usp=sharing)**
+
+To test file ingestion, asynchronous processing, and measurements:
+
+```bash
+# Upload a downloaded test file (KML or Shapefile ZIP)
+curl -X POST "http://localhost:8000/api/files/" -F "file=@path/to/downloaded_file.kml"
+
+# Poll processing status (HTTP 200 with status: PENDING / PROCESSING / COMPLETED)
+curl "http://localhost:8000/api/files/{id}/"
+
+# Retrieve calculated geometries, areas, and lengths
+curl "http://localhost:8000/api/files/{id}/measurements/"
+```

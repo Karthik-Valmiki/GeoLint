@@ -1,6 +1,7 @@
 """File upload and status API routes."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -92,7 +93,7 @@ async def upload_file(
 
     # 6. Persist bytes to storage; clean up the DB record on failure
     try:
-        save_upload(file_record.id, filename, data)
+        await asyncio.to_thread(save_upload, file_record.id, filename, data)
     except StorageError as exc:
         # Best-effort cleanup of the orphaned DB record
         try:
